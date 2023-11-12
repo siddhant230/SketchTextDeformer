@@ -16,6 +16,8 @@ def main():
 
     # CLIP-related
     parser.add_argument('--text_prompt', help='Target text prompt', type=str, default=argparse.SUPPRESS)
+    # TODO : added sketch image input cfg
+    parser.add_argument('--target_sketch', help='Target sketch prompt', type=str, default=argparse.SUPPRESS)
     parser.add_argument('--base_text_prompt', help='Base text prompt describing input mesh', type=str, default=argparse.SUPPRESS)
     parser.add_argument('--clip_model', help='CLIP Model for text comparison', type=str, default=argparse.SUPPRESS)
     parser.add_argument('--consistency_clip_model', help='CLIP Model for consistency', type=str, default=argparse.SUPPRESS)
@@ -34,6 +36,10 @@ def main():
     parser.add_argument('--epochs', help='Number of optimization steps', type=int, default=argparse.SUPPRESS)
     parser.add_argument('--clip_weight', help='Weight for CLIP loss', type=float, default=argparse.SUPPRESS)
     parser.add_argument('--delta_clip_weight', help='Wight for delta-CLIP loss', type=float, default=argparse.SUPPRESS)
+    # TODO : added hyper-params for sketch weights
+    parser.add_argument('--sketch_clip_weight', help='Weight for sketch CLIP loss', type=float, default=argparse.SUPPRESS)
+    parser.add_argument('--delta_sketch_clip_weight', help='Wight for delta-sketch CLIP loss', type=float, default=argparse.SUPPRESS)
+
     parser.add_argument('--regularize_jacobians_weight', help='Weight for jacobian regularization', type=float, default=argparse.SUPPRESS)
     parser.add_argument('--consistency_loss_weight', help='Weight for viewpoint consistency penalty', type=float, default=argparse.SUPPRESS)
     parser.add_argument('--consistency_elev_filter', help='Elev. angle threshold for filtering out pairs of viewpoints for consistency loss', type=float, default=argparse.SUPPRESS)

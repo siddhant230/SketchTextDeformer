@@ -9,6 +9,7 @@ import torchvision
 import logging
 import yaml
 
+from PIL import Image
 import numpy as np
 import nvdiffrast.torch as dr
 import matplotlib.pyplot as plt
@@ -47,7 +48,7 @@ def loop(cfg):
     torch.cuda.set_device(device)
 
     print('Loading CLIP Models')
-    model, _ = clip.load(cfg.clip_model, device=device)
+    model, preprocess = clip.load(cfg.clip_model, device=device)
     fe = CLIPVisualEncoder(cfg.consistency_clip_model, cfg.consistency_vit_stride, device)
 
     clip_mean = torch.tensor([0.48154660, 0.45782750, 0.40821073], device=device)
@@ -62,6 +63,9 @@ def loop(cfg):
 
     print(f'Target text prompt is {cfg.text_prompt}')
     print(f'Base text prompt is {cfg.base_text_prompt}')
+    print(f'Target sketch shape', cfg.target_sketch.shape)
+    #TODO : load image/sketch
+    sketch = Image.open(cfg.target_sketch)
     with torch.no_grad():
         text_embeds = clip.tokenize(cfg.text_prompt).to(device)
         base_text_embeds = clip.tokenize(cfg.base_text_prompt).to(device)
@@ -70,6 +74,14 @@ def loop(cfg):
 
         delta_text_embeds = text_embeds - model.encode_text(base_text_embeds)
         delta_text_embeds = delta_text_embeds / delta_text_embeds.norm(dim=1, keepdim=True)
+
+        #TODO : for target sketch alignment with base text - guidance
+        preprocessed_sketch = preprocess(sketch)
+        sketch_embeds = model.encode_image(preprocessed_sketch)
+        target_sketch_embeds = sketch_embeds.clone() / sketch_embeds.norm(dim=1, keepdim=True)
+
+        delta_sketch_text_embeds = sketch_embeds - model.encode_text(base_text_embeds)
+        delta_sketch_text_embeds = delta_sketch_text_embeds / delta_sketch_text_embeds.norm(dim=1, keepdim=True)
 
     os.makedirs(output_path / 'tmp', exist_ok=True)
     ms = pymeshlab.MeshSet()
@@ -324,8 +336,16 @@ def loop(cfg):
 
         clip_loss = cosine_avg(orig_image_embeds, target_text_embeds)
         delta_clip_loss = cosine_avg(delta_image_embeds, delta_text_embeds)
+
+        #TODO : add sketch cosine loss as well
+        sketch_clip_loss = cosine_avg(orig_image_embeds, target_sketch_embeds)
+        delta_sketch_clip_loss = cosine_avg(delta_image_embeds, delta_sketch_text_embeds)
+
         logger.add_scalar('clip_loss', clip_loss, global_step=it)
         logger.add_scalar('delta_clip_loss', delta_clip_loss, global_step=it)
+
+        logger.add_scalar('sketch_clip_loss', sketch_clip_loss, global_step=it)
+        logger.add_scalar('sketch_delta_clip_loss', delta_sketch_clip_loss, global_step=it)
 
         # Jacobian regularization
         r_loss = (((gt_jacobians) - torch.eye(3, 3, device=device)) ** 2).mean()
@@ -366,8 +386,11 @@ def loop(cfg):
         consistency_loss = cosines[cosines != 0].mean()
         logger.add_scalar('consistency_loss', consistency_loss, global_step=it)
 
+        #TODO : updated objective function with sketch based clip loss
         total_loss = cfg.clip_weight * clip_loss + cfg.delta_clip_weight * delta_clip_loss + \
+                     cfg.sketch_clip_weight * sketch_clip_loss + cfg.delta_sketch_clip_weight * delta_sketch_clip_loss + \
             cfg.regularize_jacobians_weight * r_loss - cfg.consistency_loss_weight * consistency_loss
+
         logger.add_scalar('total_loss', total_loss, global_step=it)
 
         if best_losses['total'] > total_loss:
