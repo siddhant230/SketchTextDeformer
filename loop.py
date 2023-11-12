@@ -30,7 +30,7 @@ from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 from utilities.video import Video
-from utilities.helpers import cosine_avg, create_scene, get_vp_map
+from utilities.helpers import cosine_avg, create_scene, get_vp_map, get_edge_map
 from utilities.camera import CameraBatch, get_camera_params
 from utilities.clip_spatial import CLIPVisualEncoder
 from utilities.resize_right import resize, cubic, linear, lanczos2, lanczos3
@@ -75,13 +75,10 @@ def loop(cfg):
         delta_text_embeds = text_embeds - model.encode_text(base_text_embeds)
         delta_text_embeds = delta_text_embeds / delta_text_embeds.norm(dim=1, keepdim=True)
 
-        #TODO : for target sketch alignment with base text - guidance
+        #TODO : for target sketch alignment - guidance
         preprocessed_sketch = preprocess(sketch)
         sketch_embeds = model.encode_image(preprocessed_sketch)
         target_sketch_embeds = sketch_embeds.clone() / sketch_embeds.norm(dim=1, keepdim=True)
-
-        delta_sketch_text_embeds = sketch_embeds - model.encode_text(base_text_embeds)
-        delta_sketch_text_embeds = delta_sketch_text_embeds / delta_sketch_text_embeds.norm(dim=1, keepdim=True)
 
     os.makedirs(output_path / 'tmp', exist_ok=True)
     ms = pymeshlab.MeshSet()
@@ -323,6 +320,8 @@ def loop(cfg):
 
         # CLIP similarity losses
         normalized_clip_render = (train_render - clip_mean[None, :, None, None]) / clip_std[None, :, None, None]
+        # TODO : this is an image : normalized_clip_render
+        
         image_embeds = model.encode_image(
             normalized_clip_render
         )
@@ -330,6 +329,14 @@ def loop(cfg):
             normalized_base_render = (base_render - clip_mean[None, :, None, None]) / clip_std[None, :, None, None]
             base_embeds = model.encode_image(normalized_base_render)
         
+        base_edge_embeds = model.encode_image(
+            get_edge_map(normalized_base_render)
+        )
+        # TODO : target sketch alignment wrt render edge
+        delta_sketch_edge_embeds = sketch_embeds - base_edge_embeds
+        delta_sketch_edge_embeds = delta_sketch_edge_embeds / delta_sketch_edge_embeds.norm(dim=1, keepdim=True)
+        
+
         orig_image_embeds = image_embeds.clone() / image_embeds.norm(dim=1, keepdim=True)
         delta_image_embeds = image_embeds - base_embeds
         delta_image_embeds = delta_image_embeds / delta_image_embeds.norm(dim=1, keepdim=True)
@@ -339,7 +346,7 @@ def loop(cfg):
 
         #TODO : add sketch cosine loss as well
         sketch_clip_loss = cosine_avg(orig_image_embeds, target_sketch_embeds)
-        delta_sketch_clip_loss = cosine_avg(delta_image_embeds, delta_sketch_text_embeds)
+        delta_sketch_clip_loss = cosine_avg(delta_image_embeds, delta_sketch_edge_embeds)
 
         logger.add_scalar('clip_loss', clip_loss, global_step=it)
         logger.add_scalar('delta_clip_loss', delta_clip_loss, global_step=it)

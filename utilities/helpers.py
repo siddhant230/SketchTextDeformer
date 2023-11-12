@@ -23,6 +23,10 @@ def cosine_sum(features, targets):
 def cosine_avg(features, targets):
     return -cosine_sim(features, targets).mean()
     
+def get_edge_map(image):
+    # TODO : implement edge map calcualtions from image/render.
+    return image
+
 def _merge_attr_idx(a, b, a_idx, b_idx, scale_a=1.0, scale_b=1.0, add_a=0.0, add_b=0.0):
     if a is None and b is None:
         return None, None
